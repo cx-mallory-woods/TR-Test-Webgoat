@@ -3,7 +3,7 @@ using System.Web;
 using System.Web.UI;
 using OWASP.WebGoat.NET.App_Code.DB;
 using OWASP.WebGoat.NET.App_Code;
-
+// CUSTOM CODE GOES HERE
 namespace OWASP.WebGoat.NET
 {
 	public partial class Default : System.Web.UI.Page
