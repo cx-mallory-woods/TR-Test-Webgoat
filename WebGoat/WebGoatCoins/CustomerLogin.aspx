@@ -6,7 +6,7 @@
 <asp:Content ID="Content3" ContentPlaceHolderID="BodyContentPlaceholder" runat="server">
    
     <script type="text/javascript">
-        //var return_url = <%= Request["ReturnUrl"] == null ? "\"\"" : "\"" + Request["ReturnUrl"].ToString() + "\"" %>
+        //var return_url = <%= Request["ReturnUrl"] == null ? "\"\"" : "\"" + HttpUtility.HtmlEncode(Request["ReturnUrl"]) + "\"" %>
         //alert(return_url)
     </script>
 
