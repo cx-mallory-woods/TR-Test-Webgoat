@@ -9,28 +9,19 @@ namespace OWASP.WebGoat.NET.Content
         {
         }
 
-        public unsafe void btnReverse_Click(object sender, EventArgs args)
+        public void btnReverse_Click(object sender, EventArgs args)
         {
-            const string msg = "passwor";
-            const int INPUT_LEN = 256;
-            char[] fixedChar = new char[INPUT_LEN];
-
-            for (int i = 0; i < fixedChar.Length; i++)
-                fixedChar[i] = '\0';
-
-            fixed (char* revLine = fixedChar)
-            {
-                int lineLen = txtBoxMsg.Text.Length;
-
-                for (int i = 0; i < lineLen; i++)
-                    *(revLine + i) = txtBoxMsg.Text[lineLen - i - 1];
-
-                char* revCur = revLine;
-
-                lblReverse.Text = string.Empty;
-                while (*revCur != '\0')
-                    lblReverse.Text += (char)*revCur++;
-            }
+            // Fix for CWE-120 (Buffer Overflow): the original implementation used an
+            // unsafe block with raw pointer arithmetic and a fixed-size 256-char buffer,
+            // with no bounds check on txtBoxMsg.Text.Length.  Input longer than 256
+            // characters would write past the end of the buffer.
+            //
+            // Remediation: replace the entire unsafe pointer-based reversal with a
+            // managed, bounds-safe equivalent using char[] and new string().
+            // This eliminates the unsafe sink entirely so no overflow is possible.
+            char[] chars = txtBoxMsg.Text.ToCharArray();
+            Array.Reverse(chars);
+            lblReverse.Text = new string(chars);
         }
     }
 }
