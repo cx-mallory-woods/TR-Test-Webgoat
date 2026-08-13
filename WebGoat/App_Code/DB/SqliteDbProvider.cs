@@ -296,16 +296,18 @@ namespace OWASP.WebGoat.NET.App_Code.DB
 
         public string[] GetSecurityQuestionAndAnswer(string email)
         {
-            string sql = "select SecurityQuestions.question_text, CustomerLogin.answer from CustomerLogin, " + 
-                "SecurityQuestions where CustomerLogin.email = '" + email + "' and CustomerLogin.question_id = " +
+            // Use a parameterized query to prevent SQL injection
+            string sql = "select SecurityQuestions.question_text, CustomerLogin.answer from CustomerLogin, " +
+                "SecurityQuestions where CustomerLogin.email = @email and CustomerLogin.question_id = " +
                 "SecurityQuestions.question_id;";
-                
+
             string[] qAndA = new string[2];
-            
+
             using (SqliteConnection connection = new SqliteConnection(_connectionString))
             {
                 SqliteDataAdapter da = new SqliteDataAdapter(sql, connection);
-                
+                da.SelectCommand.Parameters.AddWithValue("@email", email);
+
                 DataSet ds = new DataSet();
                 da.Fill(ds);
 
