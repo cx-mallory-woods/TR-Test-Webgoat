@@ -347,12 +347,13 @@ namespace OWASP.WebGoat.NET.App_Code.DB
             string result = string.Empty;
             try
             {
-            
+
                 using (MySqlConnection connection = new MySqlConnection(_connectionString))
                 {
-                    //get data
-                    string sql = "select * from CustomerLogin where email = '" + email + "';";
+                    //get data - use parameterized query to prevent SQL injection (CWE-89)
+                    string sql = "select * from CustomerLogin where email = @email;";
                     MySqlDataAdapter da = new MySqlDataAdapter(sql, connection);
+                    da.SelectCommand.Parameters.AddWithValue("@email", email);
                     DataSet ds = new DataSet();
                     da.Fill(ds);
 
