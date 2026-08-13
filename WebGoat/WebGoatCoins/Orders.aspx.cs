@@ -88,8 +88,26 @@ namespace OWASP.WebGoat.NET.WebGoatCoins
                 string target_image = Request["image"];
                 if (target_image != null)
                 {
-                    FileInfo fi = new FileInfo(Server.MapPath(target_image));
-                    lblOutput.Text = fi.FullName;
+                    // Resolve the allowed base directory to its canonical absolute path so
+                    // that directory traversal sequences such as "../" or "%2e%2e/" cannot
+                    // escape outside the products image folder (CWE-22).
+                    string allowedBase = Path.GetFullPath(Server.MapPath("images/products/"));
+
+                    // Resolve the user-supplied path to its canonical absolute path.
+                    FileInfo fi = new FileInfo(Path.GetFullPath(Server.MapPath(target_image)));
+
+                    // Containment check: reject any path that does not start with the
+                    // allowed base directory (including the trailing separator so that a
+                    // sibling directory named "images/productsFoo" is not mistakenly
+                    // accepted).
+                    if (!fi.FullName.StartsWith(allowedBase, StringComparison.OrdinalIgnoreCase))
+                    {
+                        Response.StatusCode = 400;
+                        Response.End();
+                        return;
+                    }
+
+                    lblOutput.Text = fi.Name;
 
                     NameValueCollection imageExtensions = new NameValueCollection();
                     imageExtensions.Add(".jpg", "image/jpeg");
