@@ -242,5 +242,145 @@ namespace OWASP.WebGoat.NET.App_Code.DB.Tests
             Assert.IsNull(result[0],
                 "Empty email should return null question slot.");
         }
+
+        // -----------------------------------------------------------------------
+        // Security regression tests for GetEmailByCustomerNumber (CWE-89).
+        //
+        // Taint flow fixed:
+        //   SOURCE: SQLInjectionDiscovery.aspx.cs line 27 – txtID.Text (user input)
+        //           → name = txtID.Text.Substring(0, 3)
+        //           → du.GetEmailByCustomerNumber(name)
+        //   SINK:   SqliteDbProvider.cs (previously line 521-522) –
+        //           string-concatenated query passed to SqliteCommand / ExecuteScalar.
+        //
+        // Before the fix the query was built by string concatenation:
+        //   "select email from CustomerLogin where customerNumber = " + num
+        // so an attacker could inject arbitrary SQL via the num parameter.
+        // After the fix the value is bound via Parameters.AddWithValue so the
+        // entire payload is treated as a literal data value.
+        // -----------------------------------------------------------------------
+
+        [Test]
+        public void GetEmailByCustomerNumber_KnownCustomerNumber_ReturnsEmail()
+        {
+            // Positive case: a valid customer number must return the seeded email.
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber("100");
+
+            Assert.AreEqual("alice@example.com", result,
+                "GetEmailByCustomerNumber must return the stored email for a known customer number.");
+        }
+
+        [Test]
+        public void GetEmailByCustomerNumber_UnknownCustomerNumber_ReturnsNullOrEmpty()
+        {
+            // An integer customer number that does not exist in the database must
+            // return null (ExecuteScalar returns null when no rows match).
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber("9999");
+
+            Assert.IsTrue(result == null || result == string.Empty,
+                "GetEmailByCustomerNumber must return null or empty for an unknown customer number.");
+        }
+
+        [Test]
+        public void GetEmailByCustomerNumber_TautologyInjection_DoesNotReturnEmail()
+        {
+            // Classic always-true tautology injection.
+            // Without parameterization the injected query would be:
+            //   SELECT email FROM CustomerLogin WHERE customerNumber = 1 OR 1=1
+            // which returns the first row regardless of the customer number.
+            // With parameterization the entire string is a data value; SQLite
+            // will try to cast it to an integer, fail to match any row, and return null.
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber("1 OR 1=1");
+
+            Assert.IsTrue(result == null || result == string.Empty,
+                "Tautology injection payload must not retrieve any row; " +
+                "parameterized query treats the value as a literal string.");
+        }
+
+        [Test]
+        public void GetEmailByCustomerNumber_UnionBasedInjection_DoesNotReturnEmail()
+        {
+            // UNION SELECT injection.
+            // Without parameterization this would append an attacker-chosen row:
+            //   SELECT email FROM CustomerLogin WHERE customerNumber = 0
+            //   UNION SELECT 'injected@attacker.com'
+            // With parameterization the whole string is a literal value; no
+            // customerNumber column equals that string, so null is returned.
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber(
+                "0 UNION SELECT 'injected@attacker.com' --");
+
+            Assert.IsTrue(result == null || result == string.Empty,
+                "UNION-based injection payload must not retrieve any row.");
+        }
+
+        [Test]
+        public void GetEmailByCustomerNumber_CommentTerminatorInjection_DoesNotReturnEmail()
+        {
+            // Comment-terminator payload.
+            // Without parameterization:
+            //   WHERE customerNumber = 100 --
+            // would discard any trailing predicate and return alice's row.
+            // With parameterization the stored customerNumber (integer 100) is
+            // NOT equal to the literal string '100 --', so null is returned.
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber("100 --");
+
+            Assert.IsTrue(result == null || result == string.Empty,
+                "Comment-terminator injection must not match the stored customer number.");
+        }
+
+        [Test]
+        public void GetEmailByCustomerNumber_BlindBooleanInjection_DoesNotReturnEmail()
+        {
+            // Blind boolean injection via AND.
+            // Without parameterization:
+            //   WHERE customerNumber = 100 AND 1=1
+            // would still match alice's row.  With parameterization the
+            // literal string '100 AND 1=1' matches no stored integer, so null
+            // is returned.
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber("100 AND 1=1");
+
+            Assert.IsTrue(result == null || result == string.Empty,
+                "Blind boolean injection payload must not match any stored customer number.");
+        }
+
+        [Test]
+        public void GetEmailByCustomerNumber_DropTableInjection_DatabaseIntact()
+        {
+            // Destructive stacked-query injection.
+            // A naive concatenation on some drivers could execute:
+            //   SELECT email FROM CustomerLogin WHERE customerNumber = 0;
+            //   DROP TABLE CustomerLogin; --
+            // With parameterization the table must remain intact afterwards.
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber(
+                "0; DROP TABLE CustomerLogin; --");
+
+            Assert.IsTrue(result == null || result == string.Empty,
+                "Stacked DROP TABLE injection must not affect the database.");
+
+            // Confirm the table still exists by doing a legitimate lookup
+            string legitimateResult = provider.GetEmailByCustomerNumber("100");
+            Assert.AreEqual("alice@example.com", legitimateResult,
+                "CustomerLogin table must still be intact after the injection attempt.");
+        }
+
+        [Test]
+        public void GetEmailByCustomerNumber_EmptyString_ReturnsNullOrEmpty()
+        {
+            // An empty string is a valid (if unusual) parameter value; the
+            // parameterized query must handle it without throwing and return
+            // null since no row has an empty customer number.
+            SqliteDbProvider provider = CreateProvider();
+            string result = provider.GetEmailByCustomerNumber(string.Empty);
+
+            Assert.IsTrue(result == null || result == string.Empty,
+                "Empty customer number must return null or empty, not throw.");
+        }
     }
 }

@@ -515,21 +515,26 @@ namespace OWASP.WebGoat.NET.App_Code.DB
             string output = "";
             try
             {
-            
+
                 using (SqliteConnection connection = new SqliteConnection(_connectionString))
                 {
-                    string sql = "select email from CustomerLogin where customerNumber = " + num;
+                    // Use a parameterized query to prevent SQL injection (CWE-89).
+                    // The customer number is bound as a named parameter so the database
+                    // driver always treats it as a data value, never as SQL syntax.
+                    string sql = "select email from CustomerLogin where customerNumber = @num";
                     SqliteCommand cmd = new SqliteCommand(sql, connection);
+                    cmd.Parameters.AddWithValue("@num", num);
+                    connection.Open();
                     output = (string)cmd.ExecuteScalar();
                 }
-                
+
             }
             catch (Exception ex)
             {
                 log.Error("Error getting email by customer number", ex);
                 output = ex.Message;
             }
-            
+
             return output;
         }
 
